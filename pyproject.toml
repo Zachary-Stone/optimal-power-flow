@@ -1,0 +1,39 @@
+[project]
+name = "optimal-power-flow-tutorial"
+version = "0.1.0"
+description = "Reproducible AC optimal-power-flow learning experiments."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "codecarbon>=2.3",
+    "matplotlib>=3.7",
+    "numpy>=1.23",
+    "pandas>=1.5",
+    "pypower==5.1.19",
+    "scipy>=1.10",
+    "torch>=2.0",
+    "tqdm>=4.66",
+]
+
+[tool.poetry]
+package-mode = true
+packages = [
+    { include = "optimal_power_flow", from = "src" },
+]
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.12.0"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
