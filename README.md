@@ -29,6 +29,26 @@ Please refer to these [GitHub instructions](https://docs.github.com/en/get-start
 
 Pull requests will be reviewed by members of the Climate Change AI Tutorials team for relevance, accuracy, and conciseness.
 
+## Codebase refactor
+
+The reusable Python package is being extracted from the notebook. The planned
+module boundaries and implementation sequence are recorded in
+[`REFACTORING_PROPOSAL.md`](REFACTORING_PROPOSAL.md). Package metadata,
+configuration, and source-package skeleton are available now; experiment
+workflows will be added incrementally.
+
+Local development uses Poetry once `poetry.lock` has been generated:
+
+```bash
+poetry install
+cd src
+poetry run python main.py
+```
+
+The notebook's existing `requirements.txt` remains the dependency reference
+for its Colab-oriented workflow. Runtime downloads, outputs, and checkpoints
+are configured beneath `artifacts/` and are not committed to Git.
+
 ## Climate Change AI Tutorials
 Check out the [tutorials page](https://www.climatechange.ai/tutorials?) on our website for a full list of tutorials demonstrating how AI can be used to tackle problems related to climate change.
 

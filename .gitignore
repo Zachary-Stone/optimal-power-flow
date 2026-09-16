@@ -1,0 +1,20 @@
+# Python environments and generated Python files
+.venv/
+__pycache__/
+*.py[cod]
+
+# Test, lint, and coverage caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Runtime artifacts: downloaded data, training outputs, and model checkpoints
+artifacts/
+outputs/
+checkpoints/
+emissions.csv
+
+# Notebook checkpoints
+.ipynb_checkpoints/
