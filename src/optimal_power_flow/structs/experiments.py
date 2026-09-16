@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 ModelT = TypeVar("ModelT")
 
@@ -153,7 +153,7 @@ class ExperimentConfig:
 
 
 @dataclass(slots=True)
-class ExperimentResult(Generic[ModelT]):
+class ExperimentResult[ModelT]:
     """
     Store model, numerical metrics, and artifacts from a completed experiment.
 
