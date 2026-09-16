@@ -1,0 +1,23 @@
+[run]
+experiments = ["baseline_mlp"]
+show_figures = true
+output_directory = "artifacts/outputs"
+
+[case]
+name = "case5_pjm"
+
+[data]
+source = "opflearn_case5"
+cache_directory = "artifacts/data"
+random_seed = 2026
+train_fraction = 0.8
+
+[training]
+device = "auto"
+batch_size = 128
+epochs = 10
+learning_rate = 0.001
+track_emissions = false
+
+[baseline_mlp]
+hidden_layers = [128, 64]
