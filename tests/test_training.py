@@ -32,6 +32,7 @@ class TrainingLoopTests(unittest.TestCase):
         after = evaluate_mse_regression(loader, model, device).mean_squared_error
 
         self.assertEqual(len(history.epoch_mean_squared_errors), 80)
+        self.assertGreater(history.training_runtime_seconds, 0.0)
         self.assertLess(after, before)
         self.assertLess(after, 0.01)
 

@@ -1,10 +1,13 @@
 """Train and evaluate regression models without notebook-managed state."""
 
 from dataclasses import dataclass
+from time import perf_counter
 
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+
+from optimal_power_flow.training.emissions import track_emissions
 
 Batch = tuple[torch.Tensor, torch.Tensor]
 
@@ -18,9 +21,20 @@ class TrainingHistory:
     ----------
     epoch_mean_squared_errors : tuple[float, ...]
         Sample-weighted mean squared error ordered by epoch.
+    energy_kwh : float or None, optional
+        CodeCarbon-measured training energy. Default is None when tracking is
+        disabled.
+    emissions_kg_co2eq : float or None, optional
+        CodeCarbon-measured training emissions. Default is None when tracking
+        is disabled.
+    training_runtime_seconds : float
+        Wall-clock duration of the full optimization loop.
     """
 
     epoch_mean_squared_errors: tuple[float, ...]
+    energy_kwh: float | None = None
+    emissions_kg_co2eq: float | None = None
+    training_runtime_seconds: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +94,8 @@ def train_mse_regression(
     epochs: int,
     learning_rate: float,
     device: torch.device,
+    track_energy: bool = False,
+    emissions_project_name: str = "opf_training",
 ) -> TrainingHistory:
     """
     Train a regression model with Adam and mean squared error.
@@ -96,6 +112,10 @@ def train_mse_regression(
         Adam optimizer learning rate.
     device : torch.device
         Device where batches and model are evaluated.
+    track_energy : bool, optional
+        Whether to collect CodeCarbon energy and emissions. Default is False.
+    emissions_project_name : str, optional
+        In-memory CodeCarbon project label. Default is ``"opf_training"``.
 
     Returns
     -------
@@ -115,24 +135,31 @@ def train_mse_regression(
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     epoch_losses = []
-    for _ in range(epochs):
-        model.train()
-        squared_error_sum = 0.0
-        value_count = 0
-        for inputs, targets in training_loader:
-            inputs = inputs.to(device)
-            targets = targets.to(device)
-            predictions = model(inputs)
-            loss = torch.mean(torch.square(predictions - targets))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            squared_error_sum += float(loss.detach()) * targets.numel()
-            value_count += targets.numel()
-        if value_count == 0:
-            raise ValueError("training_loader produced no target values.")
-        epoch_losses.append(squared_error_sum / value_count)
-    return TrainingHistory(epoch_mean_squared_errors=tuple(epoch_losses))
+    started_at = perf_counter()
+    with track_emissions(track_energy, emissions_project_name) as measurement:
+        for _ in range(epochs):
+            model.train()
+            squared_error_sum = 0.0
+            value_count = 0
+            for inputs, targets in training_loader:
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+                predictions = model(inputs)
+                loss = torch.mean(torch.square(predictions - targets))
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                squared_error_sum += float(loss.detach()) * targets.numel()
+                value_count += targets.numel()
+            if value_count == 0:
+                raise ValueError("training_loader produced no target values.")
+            epoch_losses.append(squared_error_sum / value_count)
+    return TrainingHistory(
+        epoch_mean_squared_errors=tuple(epoch_losses),
+        energy_kwh=measurement.energy_kwh,
+        emissions_kg_co2eq=measurement.emissions_kg_co2eq,
+        training_runtime_seconds=perf_counter() - started_at,
+    )
 
 
 def evaluate_mse_regression(

@@ -60,6 +60,8 @@ def run_baseline_mlp(
         epochs=config.training.epochs,
         learning_rate=config.training.learning_rate,
         device=device,
+        track_energy=config.training.track_emissions,
+        emissions_project_name=f"opf_{config.name}",
     )
     metrics = evaluate_mse_regression(data_loaders.test, model, device)
     return ExperimentResult(
@@ -68,9 +70,12 @@ def run_baseline_mlp(
         metrics={
             "samples": float(metrics.sample_count),
             "mse": metrics.mean_squared_error,
+            "train_runtime_s": history.training_runtime_seconds,
         },
         metadata={
             "device": str(device),
             "training_mse": history.epoch_mean_squared_errors,
+            "energy_kwh": history.energy_kwh,
+            "emissions_kg_co2eq": history.emissions_kg_co2eq,
         },
     )
