@@ -1,5 +1,6 @@
 """Train and evaluate regression models without notebook-managed state."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -10,6 +11,7 @@ from torch.utils.data import DataLoader
 from optimal_power_flow.training.emissions import track_emissions
 
 Batch = tuple[torch.Tensor, torch.Tensor]
+LossFunction = Callable[[torch.Tensor, torch.Tensor, torch.Tensor], torch.Tensor]
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,9 +90,10 @@ def resolve_device(requested_device: str) -> torch.device:
     raise ValueError(f"Requested PyTorch device is unavailable: {requested_device!r}.")
 
 
-def train_mse_regression(
+def train_regression(
     training_loader: DataLoader[Batch],
     model: nn.Module,
+    loss_function: LossFunction,
     epochs: int,
     learning_rate: float,
     device: torch.device,
@@ -98,7 +101,7 @@ def train_mse_regression(
     emissions_project_name: str = "opf_training",
 ) -> TrainingHistory:
     """
-    Train a regression model with Adam and mean squared error.
+    Train a regression model with Adam and an explicit differentiable loss.
 
     Parameters
     ----------
@@ -106,6 +109,9 @@ def train_mse_regression(
         Shuffled batches of feature-target pairs.
     model : torch.nn.Module
         Model trained in place.
+    loss_function : collections.abc.Callable
+        Function accepting inputs, predictions, and targets and returning one
+        differentiable scalar batch loss.
     epochs : int
         Number of complete training passes.
     learning_rate : float
@@ -120,7 +126,7 @@ def train_mse_regression(
     Returns
     -------
     TrainingHistory
-        Sample-weighted mean training MSE for each epoch.
+        Sample-weighted mean training loss for each epoch.
 
     Raises
     ------
@@ -145,7 +151,7 @@ def train_mse_regression(
                 inputs = inputs.to(device)
                 targets = targets.to(device)
                 predictions = model(inputs)
-                loss = torch.mean(torch.square(predictions - targets))
+                loss = loss_function(inputs, predictions, targets)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -159,6 +165,54 @@ def train_mse_regression(
         energy_kwh=measurement.energy_kwh,
         emissions_kg_co2eq=measurement.emissions_kg_co2eq,
         training_runtime_seconds=perf_counter() - started_at,
+    )
+
+
+def train_mse_regression(
+    training_loader: DataLoader[Batch],
+    model: nn.Module,
+    epochs: int,
+    learning_rate: float,
+    device: torch.device,
+    track_energy: bool = False,
+    emissions_project_name: str = "opf_training",
+) -> TrainingHistory:
+    """
+    Train a regression model with Adam and supervised mean squared error.
+
+    Parameters
+    ----------
+    training_loader : torch.utils.data.DataLoader
+        Shuffled batches of feature-target pairs.
+    model : torch.nn.Module
+        Model trained in place.
+    epochs : int
+        Number of complete training passes.
+    learning_rate : float
+        Adam optimizer learning rate.
+    device : torch.device
+        Device where batches and model are evaluated.
+    track_energy : bool, optional
+        Whether to collect CodeCarbon energy and emissions. Default is False.
+    emissions_project_name : str, optional
+        In-memory CodeCarbon project label. Default is ``"opf_training"``.
+
+    Returns
+    -------
+    TrainingHistory
+        Sample-weighted mean squared error for each epoch.
+    """
+    return train_regression(
+        training_loader=training_loader,
+        model=model,
+        loss_function=lambda _inputs, predictions, targets: torch.mean(
+            torch.square(predictions - targets)
+        ),
+        epochs=epochs,
+        learning_rate=learning_rate,
+        device=device,
+        track_energy=track_energy,
+        emissions_project_name=emissions_project_name,
     )
 
 

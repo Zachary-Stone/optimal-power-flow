@@ -4,7 +4,12 @@ import unittest
 
 import torch
 
-from optimal_power_flow.models import BaselineMLP
+from optimal_power_flow.models import (
+    BaselineMLP,
+    BoundedResidualMLP,
+    ResidualBlock,
+    ResidualMLP,
+)
 
 
 class BaselineMLPTests(unittest.TestCase):
@@ -31,3 +36,37 @@ class BaselineMLPTests(unittest.TestCase):
             with self.subTest(arguments=arguments):
                 with self.assertRaises(ValueError):
                     BaselineMLP(**arguments)
+
+    def test_residual_models_preserve_shape_and_apply_bounds(self) -> None:
+        """Map batches through residual blocks and enforce registered output limits."""
+        inputs = torch.randn((3, 2))
+        residual = ResidualMLP(input_size=2, output_size=3, width=4, depth=2)
+        bounded = BoundedResidualMLP(
+            input_size=2,
+            output_size=3,
+            lower_bounds=torch.tensor([-1.0, 0.0, 2.0]),
+            upper_bounds=torch.tensor([1.0, 2.0, 3.0]),
+            width=4,
+            depth=2,
+        )
+
+        residual_outputs = residual(inputs)
+        bounded_outputs = bounded(inputs)
+
+        self.assertEqual(ResidualBlock(4)(torch.zeros((1, 4))).shape, (1, 4))
+        self.assertEqual(residual_outputs.shape, (3, 3))
+        self.assertEqual(bounded_outputs.shape, (3, 3))
+        self.assertTrue(torch.all(bounded_outputs >= bounded.lower_bounds))
+        self.assertTrue(torch.all(bounded_outputs <= bounded.upper_bounds))
+
+    def test_invalid_residual_widths_and_bounds_are_rejected(self) -> None:
+        """Reject unusable residual bottlenecks and incompatible bound vectors."""
+        with self.assertRaises(ValueError):
+            ResidualBlock(1)
+        with self.assertRaises(ValueError):
+            BoundedResidualMLP(
+                input_size=2,
+                output_size=2,
+                lower_bounds=torch.tensor([1.0, 0.0]),
+                upper_bounds=torch.tensor([1.0, 2.0]),
+            )

@@ -5,6 +5,7 @@ from optimal_power_flow.structs.experiments import (
     DatasetConfig,
     ExperimentConfig,
     ExperimentResult,
+    LossConfig,
     ModelConfig,
     TrainingConfig,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "DatasetConfig",
     "ExperimentConfig",
     "ExperimentResult",
+    "LossConfig",
     "ModelConfig",
     "TrainingConfig",
 ]

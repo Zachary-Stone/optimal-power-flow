@@ -7,6 +7,7 @@ from optimal_power_flow.structs import (
     DatasetConfig,
     ExperimentConfig,
     ExperimentResult,
+    LossConfig,
     ModelConfig,
     TrainingConfig,
 )
@@ -34,6 +35,8 @@ class ExperimentStructTests(unittest.TestCase):
             lambda: TrainingConfig(epochs=0),
             lambda: TrainingConfig(learning_rate=0.0),
             lambda: ModelConfig(hidden_layers=(128, 0)),
+            lambda: ModelConfig(residual_width=1),
+            lambda: LossConfig(objective_weight=-1.0),
             lambda: ExperimentConfig(""),
         ]
 

@@ -357,10 +357,24 @@ class OPFAwareMetric:
         torch.Tensor
             One non-negative reference-angle violation per batch row.
         """
+        return torch.abs(self.reference_angle_residual(outputs))
+
+    def reference_angle_residual(self, outputs: torch.Tensor) -> torch.Tensor:
+        """
+        Return the signed reference-bus voltage-angle residual.
+
+        Parameters
+        ----------
+        outputs : torch.Tensor
+            Batched canonical output vectors.
+
+        Returns
+        -------
+        torch.Tensor
+            Signed reference-bus voltage angle in radians for each batch row.
+        """
         _, _, _, angle = self.split_outputs(outputs)
-        return torch.abs(
-            angle[:, self.reference_bus_index : self.reference_bus_index + 1]
-        )
+        return angle[:, self.reference_bus_index : self.reference_bus_index + 1]
 
     def branch_flow_violations(
         self, outputs: torch.Tensor

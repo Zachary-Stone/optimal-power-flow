@@ -108,10 +108,16 @@ class ModelConfig:
         Registered model workflow identifier. Default is ``"baseline_mlp"``.
     hidden_layers : tuple[int, ...], optional
         Width of each hidden fully connected layer. Default is ``(128, 64)``.
+    residual_width : int, optional
+        Fixed hidden width for residual model variants. Default is 64.
+    residual_depth : int, optional
+        Number of residual blocks for structured variants. Default is 4.
     """
 
     name: str = "baseline_mlp"
     hidden_layers: tuple[int, ...] = (128, 64)
+    residual_width: int = 64
+    residual_depth: int = 4
 
     def __post_init__(self) -> None:
         """Validate the model identifier and hidden-layer widths."""
@@ -119,6 +125,38 @@ class ModelConfig:
             raise ValueError("Model name must not be empty.")
         if not self.hidden_layers or any(width < 1 for width in self.hidden_layers):
             raise ValueError("hidden_layers must contain positive widths.")
+        if self.residual_width < 2:
+            raise ValueError("residual_width must be at least 2.")
+        if self.residual_depth < 0:
+            raise ValueError("residual_depth must be non-negative.")
+
+
+@dataclass(frozen=True, slots=True)
+class LossConfig:
+    """
+    Define weights for supervised and self-supervised OPF training objectives.
+
+    Parameters
+    ----------
+    equality_weight : float, optional
+        Weight of quadratic equality residuals. Default is 0.01.
+    inequality_weight : float, optional
+        Weight of quadratic inequality violations. Default is 0.01.
+    objective_weight : float, optional
+        Weight of generator-cost objective in label-free loss. Default is 1e-5.
+    """
+
+    equality_weight: float = 0.01
+    inequality_weight: float = 0.01
+    objective_weight: float = 1e-5
+
+    def __post_init__(self) -> None:
+        """Validate non-negative constraint and objective weights."""
+        if (
+            min(self.equality_weight, self.inequality_weight, self.objective_weight)
+            < 0.0
+        ):
+            raise ValueError("Loss weights must be non-negative.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +176,8 @@ class ExperimentConfig:
         Common model-training settings. Default is tutorial-sized training.
     model : ModelConfig, optional
         Surrogate-model settings. Default is the baseline MLP.
+    loss : LossConfig, optional
+        Constraint and objective weights. Default is fixed tutorial weights.
     """
 
     name: str
@@ -145,6 +185,7 @@ class ExperimentConfig:
     dataset: DatasetConfig = field(default_factory=DatasetConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
+    loss: LossConfig = field(default_factory=LossConfig)
 
     def __post_init__(self) -> None:
         """Validate the experiment identifier."""
