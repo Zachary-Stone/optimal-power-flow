@@ -112,12 +112,21 @@ class ModelConfig:
         Fixed hidden width for residual model variants. Default is 64.
     residual_depth : int, optional
         Number of residual blocks for structured variants. Default is 4.
+    topology_width, topology_depth : int, optional
+        Hidden width and message-passing depth for the topology GNN.
+    transformer_width, transformer_heads, transformer_depth : int, optional
+        Attention-model dimensions for the bus-level Transformer.
     """
 
     name: str = "baseline_mlp"
     hidden_layers: tuple[int, ...] = (128, 64)
     residual_width: int = 64
     residual_depth: int = 4
+    topology_width: int = 64
+    topology_depth: int = 2
+    transformer_width: int = 64
+    transformer_heads: int = 4
+    transformer_depth: int = 2
 
     def __post_init__(self) -> None:
         """Validate the model identifier and hidden-layer widths."""
@@ -129,6 +138,15 @@ class ModelConfig:
             raise ValueError("residual_width must be at least 2.")
         if self.residual_depth < 0:
             raise ValueError("residual_depth must be non-negative.")
+        if self.topology_width < 1 or self.topology_depth < 0:
+            raise ValueError("Topology GNN width and depth are invalid.")
+        if (
+            self.transformer_width < 1
+            or self.transformer_heads < 1
+            or self.transformer_depth < 1
+            or self.transformer_width % self.transformer_heads
+        ):
+            raise ValueError("Transformer dimensions are invalid.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,19 +162,34 @@ class LossConfig:
         Weight of quadratic inequality violations. Default is 0.01.
     objective_weight : float, optional
         Weight of generator-cost objective in label-free loss. Default is 1e-5.
+    augmented_equality_penalty, augmented_inequality_penalty : float, optional
+        Quadratic constraint coefficients for augmented-Lagrangian training.
+    dual_learning_rate : float, optional
+        Positive projected dual-ascent step size. Default is 0.001.
     """
 
     equality_weight: float = 0.01
     inequality_weight: float = 0.01
     objective_weight: float = 1e-5
+    augmented_equality_penalty: float = 1.0
+    augmented_inequality_penalty: float = 1.0
+    dual_learning_rate: float = 0.001
 
     def __post_init__(self) -> None:
         """Validate non-negative constraint and objective weights."""
         if (
-            min(self.equality_weight, self.inequality_weight, self.objective_weight)
+            min(
+                self.equality_weight,
+                self.inequality_weight,
+                self.objective_weight,
+                self.augmented_equality_penalty,
+                self.augmented_inequality_penalty,
+            )
             < 0.0
         ):
             raise ValueError("Loss weights must be non-negative.")
+        if self.dual_learning_rate <= 0.0:
+            raise ValueError("dual_learning_rate must be positive.")
 
 
 @dataclass(frozen=True, slots=True)

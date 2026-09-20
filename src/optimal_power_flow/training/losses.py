@@ -213,3 +213,105 @@ class SelfSupervisedOPFLoss(nn.Module):
             + self.inequality_weight * inequality_penalty
             + self.objective_weight * objective
         )
+
+
+class AugmentedLagrangianLoss(nn.Module):
+    """Combine supervised error with adaptive equality and inequality duals.
+
+    Parameters
+    ----------
+    metric : optimal_power_flow.power.metrics.OPFAwareMetric
+        Case-specific differentiable physical metric object.
+    mse_weight : float, optional
+        Weight for supervised mean squared error. Default is 1.0.
+    equality_penalty : float, optional
+        Quadratic equality-constraint coefficient. Default is 1.0.
+    inequality_penalty : float, optional
+        Quadratic inequality-constraint coefficient. Default is 1.0.
+
+    Notes
+    -----
+    Constraint multipliers are initialized lazily because their dimensions
+    depend on the case-specific metric. Call :meth:`update_duals` after each
+    optimizer step to perform projected dual ascent for inequalities.
+    """
+
+    def __init__(
+        self,
+        metric: OPFAwareMetric,
+        mse_weight: float = 1.0,
+        equality_penalty: float = 1.0,
+        inequality_penalty: float = 1.0,
+    ) -> None:
+        """Initialize scalar weights and empty, case-lazy dual multipliers."""
+        super().__init__()
+        if min(mse_weight, equality_penalty, inequality_penalty) < 0.0:
+            raise ValueError("Augmented-Lagrangian weights must be non-negative.")
+        self.metric = metric
+        self.mse_weight = mse_weight
+        self.equality_penalty = equality_penalty
+        self.inequality_penalty = inequality_penalty
+        self.register_buffer("equality_multipliers", torch.empty(0))
+        self.register_buffer("inequality_multipliers", torch.empty(0))
+
+    def _initialize_multipliers(self, items: ConstraintItems) -> None:
+        """Allocate zero-valued multipliers for the observed constraint layout."""
+        equality_count = items.equality.shape[1]
+        inequality_count = items.inequality.shape[1]
+        if self.equality_multipliers.numel() == 0:
+            self.equality_multipliers = torch.zeros(
+                equality_count, dtype=items.equality.dtype, device=items.equality.device
+            )
+            self.inequality_multipliers = torch.zeros(
+                inequality_count,
+                dtype=items.inequality.dtype,
+                device=items.inequality.device,
+            )
+        elif (
+            self.equality_multipliers.numel() != equality_count
+            or self.inequality_multipliers.numel() != inequality_count
+        ):
+            raise ValueError("Constraint dimensions changed after dual initialization.")
+
+    def forward(
+        self, inputs: torch.Tensor, predictions: torch.Tensor, targets: torch.Tensor
+    ) -> torch.Tensor:
+        """Calculate the supervised augmented-Lagrangian objective for a batch."""
+        items = get_opf_constraint_items(self.metric, inputs, predictions)
+        self._initialize_multipliers(items)
+        equality_mean = torch.mean(items.equality, dim=0)
+        inequality_mean = torch.mean(items.inequality, dim=0)
+        mean_squared_error = torch.mean(torch.square(predictions - targets))
+        equality_square, inequality_square = quadratic_constraint_penalties(items)
+        return (
+            self.mse_weight * mean_squared_error
+            + torch.dot(self.equality_multipliers.detach(), equality_mean)
+            + torch.dot(self.inequality_multipliers.detach(), inequality_mean)
+            + 0.5 * self.equality_penalty * equality_square
+            + 0.5 * self.inequality_penalty * inequality_square
+        )
+
+    @torch.no_grad()
+    def update_duals(
+        self, inputs: torch.Tensor, predictions: torch.Tensor, learning_rate: float
+    ) -> None:
+        """Perform one equality and projected-inequality dual ascent update.
+
+        Parameters
+        ----------
+        inputs : torch.Tensor
+            Batched canonical active and reactive load features.
+        predictions : torch.Tensor
+            Batched canonical target predictions from the just-updated model.
+        learning_rate : float
+            Positive dual ascent step size.
+        """
+        if learning_rate <= 0.0:
+            raise ValueError("learning_rate must be positive.")
+        items = get_opf_constraint_items(self.metric, inputs, predictions)
+        self._initialize_multipliers(items)
+        equality_update = learning_rate * torch.mean(items.equality, dim=0)
+        self.equality_multipliers.add_(equality_update)
+        self.inequality_multipliers.add_(
+            learning_rate * torch.mean(items.inequality, dim=0)
+        ).clamp_(min=0.0)
